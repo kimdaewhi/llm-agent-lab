@@ -12,7 +12,7 @@
 #   - 멈추는 기준을 finish_reason 한 곳으로 통일
 #
 # 🔧 방법
-#   - 대화 처리부를 run_agent(user_input) 함수로 분리
+#   - 대화 처리부를 run_agent(messages, max_steps) 함수로 분리
 #   - while True, API 호출 1회 = 1스텝
 #     · finish_reason == "tool_calls" → 도구 실행 후 다음 스텝
 #     · 그 외                        → 최종 답변 반환 후 종료
@@ -27,7 +27,13 @@
 #   - max_steps 탈출 시 content None 문제
 #
 # ✅ 결론
-#   - (실습 후 작성)
+#   - 루프를 도는 주체는 내 코드다. 모델은 한 스텝에 한 응답만 하고,
+#     다음 스텝을 열지 말지는 finish_reason을 보는 내 조건문이 정한다.
+#   - 종료 조건은 finish_reason 하나로 충분하다. tool_calls면 계속, 그 외면 끝.
+#   - diamond_pickaxe 제작이 9스텝에 끝났다. 한 스텝의 tool_calls 배열에
+#     도구가 여러 개 담기기 때문. 즉 스텝 수 ≠ 도구 호출 수.
+#   - max_steps는 정답이 아니라 안전장치다. 초과하면 answer가 없으므로
+#     사용자에게 줄 답변은 루프 밖에서 따로 만들어야 한다.
 # ============================================================
 import os
 import httpx
