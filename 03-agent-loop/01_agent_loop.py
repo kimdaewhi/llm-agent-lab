@@ -341,7 +341,9 @@ def post_request(messages, tools):
         return data
 
 
-def run_agent(messages: list, curr_step=0, max_steps=10):
+def run_agent(messages: list, max_steps=10):
+    curr_step = 0
+    
     while True:
         curr_step += 1
         
@@ -398,7 +400,6 @@ def run_agent(messages: list, curr_step=0, max_steps=10):
             print(f"prompt token: {usage_tokens_input}, output token: {usage_tokens_output}, costs: {usage_costs}")
             print("-------------------------------------------------------------------")
             
-            curr_step = 0  # 스텝 초기화
             return answer
 
 
@@ -408,7 +409,6 @@ if __name__ == "__main__":
     # 대화 히스토리
     messages = []
     
-    curr_step = 0
     max_steps = 10
     
     while True:
@@ -431,7 +431,7 @@ if __name__ == "__main__":
         
         
         # 2) Agent Loop
-        answer = run_agent(messages, curr_step, max_steps)
+        answer = run_agent(messages, max_steps)
         
         if answer is None:
             print("루프가 종료되었습니다.")
