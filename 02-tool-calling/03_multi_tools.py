@@ -43,10 +43,27 @@ OPENROUTER_BASE_URL = os.getenv("OPENROUTER_BASE_URL")
 
 
 
-def print_json(title: str, data: object = None, tools: object = None) -> None:
-    print(f"[{title}]")
+def print_messages(title: str, messages: list) -> None:
+    print(f"[{title}] messages: {len(messages)}")
     print("-------------------------------------------------------------------")
-    print(json.dumps(data, indent=4, ensure_ascii=False))
+    for i, m in enumerate(messages):
+        role = m['role']
+        
+        if role == "tool":
+            body = f"{m['tool_call_id'][:12]}... → {m['content']}"
+        elif m.get('tool_calls'):
+            calls = ", ".join(
+                f"{c['function']['name']}{c['function']['arguments']}"
+                for c in m['tool_calls']
+            )
+            body = f"tool_calls({len(m['tool_calls'])}): {calls}"
+        else:
+            body = m.get('content') or "(없음)"
+        
+        if len(body) > 120:
+            body = body[:120] + "..."
+        
+        print(f"  {i} {role:<9} {body}")
     print("-------------------------------------------------------------------")
 
 
@@ -199,13 +216,13 @@ if __name__ == "__main__":
                 break
             
             # 4) 요청
-            print_json("요청 전문", messages, tools)
+            print_messages("요청 전문", messages)
             data = post_request(messages, tools)
             
             if data is None:
                 break
             
-            print_json("응답 전문", data)
+            print(f"finish_reason: {data['choices'][0]['finish_reason']}")
             messages.append(data['choices'][0]['message'])
             
             # 5) tool_calls 처리
