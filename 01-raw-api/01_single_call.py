@@ -21,6 +21,7 @@ load_dotenv()
 
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 OPENROUTER_BASE_URL = os.getenv("OPENROUTER_BASE_URL")
+OPENROUTER_MODEL = os.getenv("OPENROUTER_MODEL")
 
 
 if __name__ == "__main__":
@@ -38,7 +39,7 @@ if __name__ == "__main__":
         },
         
         data = json.dumps({
-            "model": "~openai/gpt-sol-latest",
+            "model": OPENROUTER_MODEL,
             "messages": [
                 {
                     "role": "user", 

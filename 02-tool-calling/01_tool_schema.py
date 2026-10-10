@@ -43,6 +43,7 @@ load_dotenv()
 
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 OPENROUTER_BASE_URL = os.getenv("OPENROUTER_BASE_URL")
+OPENROUTER_MODEL = os.getenv("OPENROUTER_MODEL")
 
 if __name__ == "__main__":
     print("프로그램 실행 중... 종료하려면 'exit'를 누르세요.")
@@ -85,7 +86,7 @@ if __name__ == "__main__":
                 "Content-Type": "application/json",
             },
             data = json.dumps({
-                "model": "~openai/gpt-sol-latest",
+                "model": OPENROUTER_MODEL,
                 "messages": messages,
                 "tools": tools
             })
@@ -94,7 +95,7 @@ if __name__ == "__main__":
         print("json 요청 전문")
         print("-------------------------------------------------------------------")
         print(json.dumps({
-            "model": "~openai/gpt-sol-latest",
+            "model": OPENROUTER_MODEL,
             "messages": messages,
             "tools": tools
         }, indent=4, ensure_ascii=False))

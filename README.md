@@ -41,6 +41,7 @@ API 키는 `.env`로 관리한다. 저장소 루트에 아래 형태로 둔다.
 ```
 OPENROUTER_API_KEY=sk-or-...
 OPENROUTER_BASE_URL=https://openrouter.ai/api/v1
+OPENROUTER_MODEL=~openai/gpt-sol-latest
 ```
 
 ## ✅ 진행 상황
