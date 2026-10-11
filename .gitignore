@@ -64,3 +64,6 @@ desktop.ini
 data/cache/
 logs/
 *.log
+
+# ---- RAG 벡터 캐시 (다시 만들 수 있음) ----
+04-rag/data/cache/

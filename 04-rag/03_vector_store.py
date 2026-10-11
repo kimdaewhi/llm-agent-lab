@@ -1,0 +1,159 @@
+# ============================================================
+# 🗄️ 03_vector_store.py — 한 번 만든 벡터를 저장하고 꺼내 쓰기
+# ============================================================
+#
+# 02에서는 실행할 때마다 같은 청크를 다시 임베딩했고, 검색 코드는 01·02에 복사돼 있었다.
+# 04(답변 생성)·05(에이전트 툴)로 가기 전에, 청크 → 임베딩 → 저장 → 검색을
+# 재사용 가능한 작은 벡터 스토어 하나로 정리한다. 새 개념보다 "정리 + 캐시 + 기준 정하기"가 주제.
+#
+# 🎯 목적
+#   - 임베딩 결과를 파일로 캐시해, 문서가 그대로면 다시 임베딩하지 않기
+#   - 캐시가 언제 무효가 되어야 하는지 (문서·청킹 설정·모델이 바뀔 때) 직접 정하기
+#   - search(question, top_k, min_score)로 top-k와 임계값을 함수 인자로 다루기
+#   - 02에서 흔들린 컷오프(0.25)를 "답이 있는 질문 vs 없는 질문" 점수로 다시 정하기
+#
+# 🔧 방법
+#   - 01·02에 복사돼 있던 함수를 rag_utils.py로 분리 → import rag_utils 로 04·05에서 바로 사용
+#     · load_text, post_embedding, post_chat, cosine_similarity, 청킹 함수 3종
+#   - load_or_create_vector_store(text)
+#     · data/cache/vector_store.json 이 있으면 읽어서 (chunks, vectors) 반환
+#     · 없으면 청킹(고정 길이 100자) → 임베딩 → JSON으로 저장 → (chunks, vectors) 반환
+#     · 임베딩이 실패하면 저장하지 않음 (빈 캐시가 남지 않게)
+#   - rag_utils.search(question, chunks, vectors, top_k, min_score)
+#     · 질문 임베딩 → numpy로 전체 청크와 코사인 유사도를 한 번에 계산 → 상위 k개
+#     · min_score 미만은 버리고 [(점수, 청크), ...] 반환 — 출력은 main에서
+#   - 임계값을 정하려고 질문을 세 그룹으로 나눠 1위 점수 비교 (min_score=0, top_k=5)
+#     · A. 답 있음 : 02의 핵심 질문 6개
+#     · B. 주제는 같은데 답 없음 : "카마라의 주급은 얼마야?", "엔조의 등번호는 몇 번이야?" 등 4개
+#     · C. 무관 : "오늘 점심 뭐 먹지?", "내일 서울 날씨 어때?" 등 3개
+#
+# 🔍 관찰
+#   - 캐시 로드 vs 새로 임베딩의 시작 시간 차이
+#   - 캐시 JSON 파일 크기 — 1536차원 float × 청크 수가 텍스트로 얼마나 되는지
+#   - 문서를 한 글자 고치거나 청킹 설정을 바꾸면 캐시가 제대로 무효화되는지
+#     · 해시 없이 파일 이름만으로 캐시하면 어떤 일이 생기는지 (오래된 벡터로 검색)
+#   - 짧은 조각 합치기 후 02에서 1위를 차지하던 제목·16자 문단 문제가 사라지는지
+#   - "답 없음" 질문의 1위 점수가 "답 있음" 질문의 1위 점수와 겹치는지
+#     · 겹친다면 고정 임계값 하나로는 "모른다"를 판단할 수 없다는 뜻 → 04에서 LLM에게 맡길 부분
+#   - top_k를 1 / 3 / 5로 바꿨을 때 multi-hop 질문에 필요한 문단이 몇 개나 들어오는지
+#   - 질문 1회 검색에서 시간 대부분이 API(질문 임베딩)인지 로컬 계산인지
+#
+# ✅ 결론 (openai/text-embedding-3-small, 고정 길이 100자 청크 22개 기준)
+#   - 캐시는 잘 동작한다. 두 번째 실행부터는 임베딩 없이 파일에서 바로 읽는다.
+#     · 대신 파일이 크다. 원문 2,172자(약 6KB) → 캐시 약 1.1MB (약 200배)
+#     · 청크 하나 = 1536차원 벡터 하나. 22개 × 1536 = 숫자 33,792개를 텍스트로 적어 둔 것
+#     · 벡터 DB가 숫자를 텍스트가 아니라 바이너리로 저장하는 이유
+#   - 캐시 파일 이름이 고정이라, 문서나 청킹 방식을 바꿔도 예전 캐시를 그대로 읽는다.
+#     → 바꿨으면 캐시 파일을 직접 지워야 한다. (자동으로 하려면 문서·설정으로 만든 해시를 파일 이름에)
+#
+#   - 핵심: 검색 점수만 보고는 "문서에 답이 없다"를 판단할 수 없다.
+#     · 질문 그룹별 1위 점수
+#         A. 답 있음   0.52  0.48  0.44  0.41  0.40  0.26
+#         B. 답 없음   0.40  0.30  0.26  0.23
+#         C. 무관      0.29  0.22  0.19
+#     · 세 그룹이 겹친다. 어디에 선을 그어도 틀린다.
+#         0.25로 자르면 → 답 없는 질문이 전부 통과, "내일 서울 날씨"(0.29)도 통과
+#         0.30으로 자르면 → 정답이 1위였던 "리라 영입은 왜 무산됐어?"(0.26)가 잘림
+#     · "카마라의 주급은 얼마야?" = 0.40. 문서에 주급은 없는데 "카마라"라는 이름 때문에 높게 나왔다.
+#     · "내일 서울 날씨"(0.29)가 "리라 영입 무산 이유"(0.26)보다 높았다.
+#   - 점수는 "비슷한 단어·분위기가 있다"는 뜻이지 "답이 들어 있다"는 뜻이 아니다.
+#
+#   - 04로 가져갈 것
+#     · min_score는 낮게(0.2 정도) 둬서 명백한 잡음만 거른다.
+#     · 답이 있는지는 LLM이 청크를 읽고 판단하게 한다. "청크에 답이 없으면 모른다고 답해라"
+#     · 첫 확인: "카마라의 주급은?"에 LLM이 "문서에 없다"고 답하는지
+# ============================================================
+import json
+import os
+
+import rag_utils as ru
+
+cache_file = os.path.join(os.path.dirname(__file__), "data", "cache", "vector_store.json")
+
+
+# ✨ 캐시 로드 함수
+def load_cache(cache_file: str):
+    if os.path.exists(cache_file):
+        with open(cache_file, "r", encoding="utf-8") as f:
+            return json.load(f)
+    return None
+
+
+# ✨ 캐시 저장 함수
+def save_and_create_cache(chunks, vectors) -> bool:
+    try:
+        os.makedirs(os.path.dirname(cache_file), exist_ok=True)
+
+        cache = {
+            "chunks": chunks,
+            "vectors": vectors
+        }
+        with open(cache_file, "w", encoding="utf-8") as f:
+            json.dump(cache, f, ensure_ascii=False, indent=4)
+        return True
+    except (OSError, TypeError, ValueError) as e:
+        print(f"캐시 저장 실패: {e}")
+        return False
+
+
+# ✨ 캐시 확인 후 없으면 임베딩하고 저장
+def load_or_create_vector_store(text: str) -> tuple:
+    cache = load_cache(cache_file)
+    if cache is not None:
+        chunks = cache["chunks"]
+        vectors = cache["vectors"]
+        return chunks, vectors
+    
+    print("캐시 없음, 임베딩 시작")
+    # chunks = ru.chunk_fixed(text=text, size=100)  # 고정 청킹 방식 사용
+    chunks = ru.chunk_overlap(text=text, size=100, overlap=20)  # 오버랩 청킹 방식 사용
+    # chunks = ru.chunk_by_separator(text=text, sep="\n\n")  # 구분자 기준 청킹 방식 사용
+
+    vectors = ru.post_embedding(input_text=chunks)
+    if not chunks or not vectors:
+        print("임베딩 실패")
+        return None, None
+
+    # 캐시에 저장
+    flag = save_and_create_cache(chunks, vectors)
+    if not flag:
+        print("캐시 생성에 실패했습니다.")
+        return None, None
+
+    return chunks, vectors
+
+
+if __name__ == "__main__":
+    text = ru.load_text()
+
+    chunks, vectors = load_or_create_vector_store(text=text)
+    if chunks is None or vectors is None:
+        print("벡터 스토어 생성에 실패했습니다.")
+    else:
+        print(f"Chunks: {chunks}")
+        print(f"Vectors: {len(vectors)}개 (차원: {len(vectors[0])})")
+
+
+    while True:
+        # 질문
+        question = input("\n질문을 입력하세요: ")
+
+        # 종료
+        if question.strip().lower() == "exit":
+            print("프로그램을 종료합니다.")
+            break
+
+        # 콘솔 클리어
+        if question.strip().lower() == "clear":
+            os.system("cls" if os.name == "nt" else "clear")
+            continue
+
+        # 모든 청크와 질문 벡터 간의 유사도 계산
+        search_similarity = ru.search(question=question, chunks=chunks, vectors=vectors, top_k=5)
+
+        if not search_similarity:
+            print("관련 문서 없음")
+            continue
+
+        for rank, (score, chunk) in enumerate(search_similarity, start=1):
+            print(f"{rank}위 | 유사도 {score:.4f} | {chunk!r}")
