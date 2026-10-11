@@ -1,3 +1,4 @@
+import json
 import os
 
 import numpy as np
@@ -5,6 +6,8 @@ import requests
 from dotenv import load_dotenv
 
 load_dotenv()
+
+cache_file = os.path.join(os.path.dirname(__file__), "data", "cache", "vector_store.json")
 
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")  # OpenRouter API 키
 OPENROUTER_BASE_URL = os.getenv("OPENROUTER_BASE_URL")  # OpenRouter Base URL
@@ -18,6 +21,63 @@ def load_text(file_name: str = "enzo_saga.txt") -> str:
     file_path = os.path.join(os.path.dirname(__file__), "data", file_name)
     with open(file_path, "r", encoding="utf-8") as f:
         return f.read()
+
+
+# ✨ 캐시 로드 함수
+def load_cache(cache_file: str):
+    if os.path.exists(cache_file):
+        with open(cache_file, "r", encoding="utf-8") as f:
+            return json.load(f)
+    return None
+
+
+# ✨ 캐시 저장 함수
+def save_and_create_cache(chunks, vectors) -> bool:
+    try:
+        os.makedirs(os.path.dirname(cache_file), exist_ok=True)
+
+        cache = {
+            "chunks": chunks,
+            "vectors": vectors
+        }
+        with open(cache_file, "w", encoding="utf-8") as f:
+            json.dump(cache, f, ensure_ascii=False, indent=4)
+        return True
+    except (OSError, TypeError, ValueError) as e:
+        print(f"캐시 저장 실패: {e}")
+        return False
+
+
+CHUNKERS = {
+    "fixed":     lambda t: chunk_fixed(t, size=100),
+    "overlap":   lambda t: chunk_overlap(t, size=100, overlap=20),
+    "separator": lambda t: chunk_by_separator(t, sep="\n\n"),
+}
+
+
+# ✨ 캐시 확인 후 없으면 임베딩하고 저장
+def load_or_create_vector_store(text: str, method: str = "overlap") -> tuple:
+    cache = load_cache(cache_file)
+    if cache is not None:
+        chunks = cache["chunks"]
+        vectors = cache["vectors"]
+        return chunks, vectors
+    
+    print("캐시 없음, 임베딩 시작")
+    chunks = CHUNKERS[method](text)  # 선택한 청킹 방식 사용
+
+    vectors = post_embedding(input_text=chunks)
+    if not chunks or not vectors:
+        print("임베딩 실패")
+        return None, None
+
+    # 캐시에 저장
+    flag = save_and_create_cache(chunks, vectors)
+    if not flag:
+        print("캐시 생성에 실패했습니다.")
+        return None, None
+
+    return chunks, vectors
 
 
 # ✨ OpenRouter Embedding API 호출 함수

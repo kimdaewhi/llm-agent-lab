@@ -63,70 +63,14 @@
 #     · 답이 있는지는 LLM이 청크를 읽고 판단하게 한다. "청크에 답이 없으면 모른다고 답해라"
 #     · 첫 확인: "카마라의 주급은?"에 LLM이 "문서에 없다"고 답하는지
 # ============================================================
-import json
 import os
 
 import rag_utils as ru
 
-cache_file = os.path.join(os.path.dirname(__file__), "data", "cache", "vector_store.json")
-
-
-# ✨ 캐시 로드 함수
-def load_cache(cache_file: str):
-    if os.path.exists(cache_file):
-        with open(cache_file, "r", encoding="utf-8") as f:
-            return json.load(f)
-    return None
-
-
-# ✨ 캐시 저장 함수
-def save_and_create_cache(chunks, vectors) -> bool:
-    try:
-        os.makedirs(os.path.dirname(cache_file), exist_ok=True)
-
-        cache = {
-            "chunks": chunks,
-            "vectors": vectors
-        }
-        with open(cache_file, "w", encoding="utf-8") as f:
-            json.dump(cache, f, ensure_ascii=False, indent=4)
-        return True
-    except (OSError, TypeError, ValueError) as e:
-        print(f"캐시 저장 실패: {e}")
-        return False
-
-
-# ✨ 캐시 확인 후 없으면 임베딩하고 저장
-def load_or_create_vector_store(text: str) -> tuple:
-    cache = load_cache(cache_file)
-    if cache is not None:
-        chunks = cache["chunks"]
-        vectors = cache["vectors"]
-        return chunks, vectors
-    
-    print("캐시 없음, 임베딩 시작")
-    # chunks = ru.chunk_fixed(text=text, size=100)  # 고정 청킹 방식 사용
-    chunks = ru.chunk_overlap(text=text, size=100, overlap=20)  # 오버랩 청킹 방식 사용
-    # chunks = ru.chunk_by_separator(text=text, sep="\n\n")  # 구분자 기준 청킹 방식 사용
-
-    vectors = ru.post_embedding(input_text=chunks)
-    if not chunks or not vectors:
-        print("임베딩 실패")
-        return None, None
-
-    # 캐시에 저장
-    flag = save_and_create_cache(chunks, vectors)
-    if not flag:
-        print("캐시 생성에 실패했습니다.")
-        return None, None
-
-    return chunks, vectors
-
-
 if __name__ == "__main__":
     text = ru.load_text()
 
-    chunks, vectors = load_or_create_vector_store(text=text)
+    chunks, vectors = ru.load_or_create_vector_store(text=text, method="fixed")
     if chunks is None or vectors is None:
         print("벡터 스토어 생성에 실패했습니다.")
     else:
