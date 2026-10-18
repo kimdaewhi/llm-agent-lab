@@ -12,7 +12,7 @@ cache_file = os.path.join(os.path.dirname(__file__), "data", "cache", "vector_st
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")  # OpenRouter API 키
 OPENROUTER_BASE_URL = os.getenv("OPENROUTER_BASE_URL")  # OpenRouter Base URL
 
-OPENROUTER_BASE_MODEL = os.getenv("OPENROUTER_MODEL")  # OpenRouter Base Model
+OPENROUTER_BASE_MODEL = os.getenv("OPENROUTER_BASE_MODEL")  # OpenRouter Base Model
 OPENROUTER_EMBEDDING_MODEL = os.getenv("OPENROUTER_EMBEDDING_MODEL")  # OpenRouter Embedding Model
 
 

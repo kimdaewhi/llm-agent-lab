@@ -46,7 +46,7 @@ load_dotenv()
 
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 OPENROUTER_BASE_URL = os.getenv("OPENROUTER_BASE_URL")
-OPENROUTER_MODEL = os.getenv("OPENROUTER_MODEL")
+OPENROUTER_BASE_MODEL = os.getenv("OPENROUTER_BASE_MODEL")
 
 
 
@@ -345,7 +345,7 @@ def post_request(messages, tools):
         },
         
         data=json.dumps({
-            "model": OPENROUTER_MODEL,
+            "model": OPENROUTER_BASE_MODEL,
             "messages": messages,
             "tools": tools
         })
